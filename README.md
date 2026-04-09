@@ -7,7 +7,7 @@ Projeto dbt herdado com falhas críticas de correção financeira, custo operaci
 ## Estrutura do Repositório
 
 ```
-finlend/
+finlend_case/
 ├── README.md
 ├── GLOSSARIO.md
 ├── SEMANTIC_NOTES.md
