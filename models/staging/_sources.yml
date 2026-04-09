@@ -1,0 +1,35 @@
+version: 2
+
+sources:
+  - name: raw
+    database: "{{ env_var('DBT_DATABASE', 'finlend') }}"
+    schema: "{{ env_var('DBT_RAW_SCHEMA', 'raw') }}"
+    freshness:
+      warn_after: { count: 6, period: hour }
+      error_after: { count: 24, period: hour }
+    loaded_at_field: _loaded_at
+
+    tables:
+      - name: transactions
+        columns:
+          - name: transaction_id
+            tests: [unique, not_null]
+          - name: amount_cents
+            tests: [not_null]
+          - name: status
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ['captured', 'refunded', 'chargeback', 'test',
+                           'testing', 'sandbox', 'homolog', 'pending',
+                           'authorized', 'cancelled']
+                  config:
+                    severity: warn
+      - name: merchants
+        columns:
+          - name: id
+            tests: [not_null]
+      - name: settlements
+        columns:
+          - name: settlement_id
+            tests: [unique, not_null]

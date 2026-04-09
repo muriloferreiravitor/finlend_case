@@ -1,0 +1,32 @@
+version: 2
+
+models:
+  - name: stg_transactions
+    description: "Transações limpas e tipadas. Filtra testes via seed. Converte centavos para NUMERIC."
+    columns:
+      - name: transaction_id
+        tests: [unique, not_null]
+      - name: merchant_id
+        tests: [not_null]
+      - name: amount_brl
+        tests: [not_null]
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['captured', 'refunded', 'chargeback',
+                       'pending', 'authorized', 'cancelled']
+
+  - name: stg_merchants
+    description: "Cadastro deduplicado de merchants. Campo id renomeado para merchant_id."
+    columns:
+      - name: merchant_id
+        tests: [unique, not_null]
+
+  - name: stg_settlements
+    description: "Settlements desnormalizados (UNNEST do array transaction_ids). Grain: settlement_id × transaction_id."
+    columns:
+      - name: settlement_id
+        tests: [not_null]
+      - name: transaction_id
+        tests: [not_null]

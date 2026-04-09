@@ -1,0 +1,263 @@
+version: 2
+
+models:
+  - name: fct_revenue
+    description: >
+      Tabela fato de transações efetivadas (captured, refunded, chargeback)
+      com settlement correspondente. Grain: uma linha por transação.
+      Fonte primária para cálculos de receita, GMV e análises transacionais.
+    meta:
+      grain: "transaction_id (PK)"
+      domain: finance
+      owner: analytics-engineering
+      sla: "Incremental diário (lookback 3 dias)"
+      pii: false
+      warning: >
+        Contém 3 métricas distintas: gmv_impact (volume bruto, NÃO é receita),
+        finlend_revenue_impact (receita da plataforma via fees) e merchant_net_impact
+        (líquido do merchant). Para "receita" ou "faturamento", usar finlend_revenue_impact.
+      example_questions:
+        - "Qual o volume de transações Pix do merchant X no último mês?"
+        - "Quanto a plataforma faturou em taxas na última semana?"
+        - "Quais transações tiveram chargeback em março?"
+
+    columns:
+      - name: transaction_id
+        description: "PK. Identificador único da transação."
+        meta: { semantic_type: identifier }
+        tests: [unique, not_null]
+
+      - name: merchant_id
+        description: "ID do merchant (Personal Banker ou escritório)."
+        meta:
+          semantic_type: identifier
+          business_alias: [personal banker, agente, escritório]
+
+      - name: merchant_name
+        description: "Nome comercial do merchant. Usar para filtros por nome."
+        meta: { semantic_type: dimension }
+
+      - name: mcc_code
+        description: "Código de categoria (4 dígitos) do merchant."
+        meta: { semantic_type: dimension }
+
+      - name: amount_brl
+        description: "Valor bruto da operação em BRL. NÃO é receita da plataforma."
+        meta:
+          semantic_type: metric
+          unit: BRL
+          warning: "Para receita, usar finlend_revenue_impact."
+
+      - name: fee_amount
+        description: "Comissão retida pela plataforma. NULL se sem settlement."
+        meta:
+          semantic_type: metric
+          unit: BRL
+          business_alias: [comissão, taxa, fee]
+
+      - name: net_amount
+        description: "Valor líquido para o merchant (amount - fee). NULL se sem settlement."
+        meta:
+          semantic_type: metric
+          unit: BRL
+
+      - name: gmv_impact
+        description: >
+          Impacto no GMV (volume bruto). Positivo para captured, negativo para refunded/chargeback.
+          NÃO é receita. Para receita, usar finlend_revenue_impact.
+        meta:
+          semantic_type: metric
+          unit: BRL
+          warning: "NÃO usar para receita."
+          business_alias: [volume, GMV, valor transacionado]
+
+      - name: finlend_revenue_impact
+        description: >
+          Impacto na receita da plataforma (fees). Positivo para captured, negativo para
+          refunded/chargeback. ESTE é o campo de faturamento.
+        meta:
+          semantic_type: metric
+          unit: BRL
+          business_alias: [receita, faturamento, taxas, comissões, fees]
+
+      - name: merchant_net_impact
+        description: "Impacto no valor líquido do merchant."
+        meta:
+          semantic_type: metric
+          unit: BRL
+
+      - name: status
+        description: "captured, refunded ou chargeback."
+        meta:
+          semantic_type: dimension
+          accepted_values: [captured, refunded, chargeback]
+        tests:
+          - accepted_values:
+              values: [captured, refunded, chargeback]
+
+      - name: payment_method
+        description: "Método de pagamento (lowercase): pix, credit_card, debit_card, boleto."
+        meta:
+          semantic_type: dimension
+          business_alias: [forma de pagamento, meio de pagamento]
+
+      - name: pix_key_type
+        description: "Tipo de chave Pix (cpf, cnpj, email, phone, random). NULL se não Pix."
+        meta: { semantic_type: dimension }
+
+      - name: installments
+        description: "Número de parcelas. NULL para transações à vista."
+        meta: { semantic_type: dimension, unit: count }
+
+      - name: transaction_date
+        description: "Data da transação (DATE). Chave de partição. Usar para filtros temporais."
+        meta:
+          semantic_type: timestamp
+          business_alias: [data, quando]
+
+      - name: created_at
+        description: "Timestamp de criação. Usar transaction_date para filtros por dia."
+        meta: { semantic_type: timestamp }
+
+      - name: settlement_date
+        description: "Data de processamento do settlement. NULL se pendente."
+        meta: { semantic_type: timestamp }
+
+      - name: paid_at
+        description: "Timestamp de pagamento efetivo do settlement."
+        meta: { semantic_type: timestamp }
+
+      - name: settlement_id
+        description: "ID do lote de liquidação. NULL se não liquidado."
+        meta: { semantic_type: identifier }
+
+      - name: is_pending_settlement
+        description: "TRUE se captured sem settlement (contas a receber pendente)."
+        meta:
+          semantic_type: flag
+          business_alias: [pendente, contas a receber]
+
+  - name: merchant_summary
+    description: >
+      Visão agregada por merchant (all-time). Grain: uma linha por merchant.
+      Interface primária para perguntas sobre performance de merchants.
+      Para perguntas com filtro temporal, usar fct_revenue.
+    meta:
+      grain: "merchant_id (PK)"
+      domain: "finance, risk"
+      owner: analytics-engineering
+      sla: "Full refresh diário após fct_revenue"
+      pii: false
+      warning: >
+        Métricas são ALL-TIME. Se a pergunta menciona período específico
+        (último mês, trimestre), NÃO usar este modelo. Ir para fct_revenue
+        com GROUP BY merchant_id.
+      example_questions:
+        - "Quais merchants têm chargeback rate acima de 2%?"
+        - "Qual o top 10 de Personal Bankers por receita?"
+        - "Quantas transações Pix o merchant X teve?"
+
+    columns:
+      - name: merchant_id
+        description: "PK."
+        meta: { semantic_type: identifier }
+        tests: [unique, not_null]
+
+      - name: merchant_name
+        meta: { semantic_type: dimension }
+
+      - name: mcc_code
+        meta: { semantic_type: dimension }
+
+      - name: total_transactions
+        meta: { semantic_type: metric, unit: count }
+
+      - name: captured_transactions
+        meta: { semantic_type: metric, unit: count }
+
+      - name: refunded_transactions
+        meta: { semantic_type: metric, unit: count }
+
+      - name: chargeback_transactions
+        meta: { semantic_type: metric, unit: count }
+
+      - name: pix_transactions
+        description: "Transações Pix. Já pré-agregado, não requer JOIN com fct_revenue."
+        meta:
+          semantic_type: metric
+          unit: count
+          business_alias: [volume pix]
+
+      - name: credit_card_transactions
+        meta: { semantic_type: metric, unit: count }
+
+      - name: debit_card_transactions
+        meta: { semantic_type: metric, unit: count }
+
+      - name: boleto_transactions
+        meta: { semantic_type: metric, unit: count }
+
+      - name: total_gmv
+        description: "GMV acumulado. NÃO é receita."
+        meta:
+          semantic_type: metric
+          unit: BRL
+          warning: "Para receita, usar total_finlend_revenue."
+
+      - name: total_finlend_revenue
+        description: "Receita total da plataforma (soma de fees)."
+        meta:
+          semantic_type: metric
+          unit: BRL
+          business_alias: [receita, faturamento]
+
+      - name: total_merchant_net
+        meta: { semantic_type: metric, unit: BRL }
+
+      - name: total_fees_captured
+        description: "Fees de transações captured (para cálculo de take rate)."
+        meta: { semantic_type: metric, unit: BRL }
+
+      - name: chargeback_rate
+        description: >
+          Chargebacks / total (ratio 0-1). Thresholds: <0.005 saudável,
+          >0.01 alerta, >0.02 crítico. Filtro: WHERE chargeback_rate > 0.02.
+        meta:
+          semantic_type: metric
+          unit: ratio
+          business_alias: [taxa de chargeback]
+
+      - name: chargeback_amount_rate
+        description: "Chargeback por valor (ratio 0-1)."
+        meta: { semantic_type: metric, unit: ratio }
+
+      - name: refund_rate
+        meta: { semantic_type: metric, unit: ratio }
+
+      - name: take_rate
+        description: "Fees / amount (ratio 0-1). Capacidade de monetização por merchant."
+        meta:
+          semantic_type: metric
+          unit: ratio
+          business_alias: [taxa de comissão]
+
+      - name: first_transaction_date
+        meta: { semantic_type: timestamp }
+
+      - name: last_transaction_date
+        description: "Última atividade. Para inativos: WHERE last_transaction_date < DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)"
+        meta: { semantic_type: timestamp }
+
+      - name: active_days
+        meta: { semantic_type: metric, unit: count }
+
+      - name: avg_settlement_days
+        description: "Tempo médio entre transação e liquidação."
+        meta: { semantic_type: metric, unit: days }
+
+      - name: pending_settlements
+        description: "Transações captured sem settlement."
+        meta:
+          semantic_type: metric
+          unit: count
+          business_alias: [pendências, contas a receber]
