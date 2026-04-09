@@ -33,29 +33,27 @@ finlend/
 
 ## Frente 1 · Staging
 
-Arquivos:
+**Arquivos:**
 
-- models/staging/_sources.yml
-- models/staging/_stg_models.yml
-- models/staging/stg_transactions.sql
-- models/staging/stg_merchants.sql
-- models/staging/stg_settlements.sql
+- `models/staging/_sources.yml`
+- `models/staging/_stg_models.yml`
+- `models/staging/stg_transactions.sql`
+- `models/staging/stg_merchants.sql`
+- `models/staging/stg_settlements.sql`
 
 
 ## Frente 2 · fct_revenue
 
 Renomeado de `revenue_report` para `fct_revenue` (tabela de fatos, não report de BI).
 
-Arquivo:
-- models/marts/fct_revenue.sql
+**Arquivo:** `models/marts/fct_revenue.sql`
 
 **Decisões técnicas:** o filtro de status (`WHERE status IN (...)`) foi posicionado antes do JOIN para reduzir o volume processado. Partição mensal evita o limite de 4.000 partições. Clustering por `merchant_id` e `status` otimiza as queries mais frequentes do negócio.
 
 
 ## Frente 3 · merchant_summary
 
-Arquivo:
-- models/marts/merchant_summary.sql
+**Arquivo:** `models/marts/merchant_summary.sql`
 
 ---
 

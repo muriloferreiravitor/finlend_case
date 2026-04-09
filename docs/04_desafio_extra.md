@@ -28,26 +28,6 @@ O aumento de 3x na conta é explicado pela combinação de três fatores present
 
 **Arquivo:** `tests/singular/assert_fee_not_greater_than_amount.sql`
 
-```sql
-SELECT
-    transaction_id,
-    merchant_id,
-    merchant_name,
-    amount_brl,
-    fee_amount,
-    net_amount,
-    status,
-    settlement_id,
-    transaction_date,
-    ROUND(fee_amount - amount_brl, 2) AS excess_amount,
-    ROUND(SAFE_DIVIDE(fee_amount, amount_brl), 4) AS fee_to_amount_ratio
-FROM {{ ref('fct_revenue') }}
-WHERE fee_amount IS NOT NULL
-  AND amount_brl IS NOT NULL
-  AND fee_amount > amount_brl
-  AND status = 'captured'
-```
-
 O teste passa quando retorna zero linhas. Quando falha, os campos `excess_amount` e `fee_to_amount_ratio` auxiliam no diagnóstico da causa raiz.
 
 **Impacto de negócio da violação:**
